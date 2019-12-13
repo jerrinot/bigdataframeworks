@@ -1,9 +1,12 @@
 package com.javaadvent.airquality;
 
+import com.hazelcast.internal.util.HashUtil;
 import com.hazelcast.jet.Jet;
 import com.hazelcast.jet.JetInstance;
+import com.hazelcast.jet.datamodel.WindowResult;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.Sinks;
+import com.hazelcast.jet.pipeline.WindowDefinition;
 import com.hazelcast.jet.pipeline.test.TestSources;
 
 import static com.hazelcast.jet.aggregate.AggregateOperations.counting;
@@ -27,20 +30,23 @@ public class HazelcastAirQualityApplication {
 	public long countPollutedRegions(String[] numbers) {
 
 		Pipeline p = Pipeline.create();
-		p.readFrom(TestSources.items(numbers))
-				.map(Integer::valueOf)
+		p.readFrom(TestSources.itemStream(100, (ts, seq) -> HashUtil.fastLongMix(ts) % 20))
+				.withIngestionTimestamps()
 				.filter(number -> number > HIGH_THRESHOLD)
+				.window(WindowDefinition.tumbling(1000))
 				.aggregate(counting())
+				.map(WindowResult::result)
 				.writeTo(Sinks.observable("filteredNumbers"));
 
 		JetInstance jet = Jet.newJetInstance();
 		try {
 			jet.newJob(p);
-
 			Iterable<Long> observableIterator = ObservableIterable.byName(jet, "filteredNumbers");
-			Long pollutedRegions = observableIterator.iterator().next();
-			System.out.println("Number of severely polluted regions: " + pollutedRegions);
-			return pollutedRegions;
+			for (long l : observableIterator) {
+				System.out.println(l);
+			}
+
+			return -1;
 		} finally {
 			Jet.shutdownAll();
 		}
