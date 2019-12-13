@@ -1,14 +1,12 @@
 package com.javaadvent.airquality;
 
-import java.util.Arrays;
-import java.util.List;
-
-import com.hazelcast.core.IList;
 import com.hazelcast.jet.Jet;
 import com.hazelcast.jet.JetInstance;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.Sinks;
-import com.hazelcast.jet.pipeline.Sources;
+import com.hazelcast.jet.pipeline.test.TestSources;
+
+import static com.hazelcast.jet.aggregate.AggregateOperations.counting;
 
 public class HazelcastAirQualityApplication {
 
@@ -29,21 +27,19 @@ public class HazelcastAirQualityApplication {
 	public long countPollutedRegions(String[] numbers) {
 
 		Pipeline p = Pipeline.create();
-		p.drawFrom(Sources.list("numbers")).
-			map(number -> Integer.valueOf((String) number))
-			.filter(number -> number > HIGH_THRESHOLD).drainTo(Sinks.list("filteredNumbers"));
+		p.readFrom(TestSources.items(numbers))
+				.map(Integer::valueOf)
+				.filter(number -> number > HIGH_THRESHOLD)
+				.aggregate(counting())
+				.writeTo(Sinks.observable("filteredNumbers"));
 
 		JetInstance jet = Jet.newJetInstance();
-		IList<String> numbersList = jet.getList("numbers");
-		numbersList.addAll(Arrays.asList(numbers));
-
 		try {
-			jet.newJob(p).join();
+			jet.newJob(p);
 
-			List<String> filteredRecordsList = jet.getList("filteredNumbers");
-			int pollutedRegions = filteredRecordsList.size();
+			Iterable<Long> observableIterator = ObservableIterable.byName(jet, "filteredNumbers");
+			Long pollutedRegions = observableIterator.iterator().next();
 			System.out.println("Number of severely polluted regions: " + pollutedRegions);
-
 			return pollutedRegions;
 		} finally {
 			Jet.shutdownAll();
