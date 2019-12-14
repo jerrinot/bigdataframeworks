@@ -2,6 +2,7 @@ package com.javaadvent.airquality;
 
 import com.hazelcast.jet.Jet;
 import com.hazelcast.jet.JetInstance;
+import com.hazelcast.jet.Observable;
 import com.hazelcast.jet.pipeline.Pipeline;
 import com.hazelcast.jet.pipeline.Sinks;
 import com.hazelcast.jet.pipeline.test.TestSources;
@@ -36,8 +37,9 @@ public class HazelcastAirQualityApplication {
 		JetInstance jet = Jet.newJetInstance();
 		try {
 			jet.newJob(p);
+			jet.getObservable("filteredNumbers").toBlockingIterable();
 
-			Iterable<Long> observableIterator = ObservableIterable.byName(jet, "filteredNumbers");
+			Iterable<Long> observableIterator = IterableObserver.byName(jet, "filteredNumbers");
 			Long pollutedRegions = observableIterator.iterator().next();
 			System.out.println("Number of severely polluted regions: " + pollutedRegions);
 			return pollutedRegions;
